@@ -11,11 +11,11 @@ def extract_difficulty(text):
 def split_text_into_blocks(text, max_length=2000):
     return [text[i:i + max_length] for i in range(0, len(text), max_length)]
 
-## repo 파일에서 사이트명 추출
+# repo 파일에서 사이트명 추출
 def extract_site_name_from_path(filename):
     return filename.split("/")[0] if "/" in filename else "Unknown"
 
-
+# markdown text를 Notion 본문에 입력하기위해 변환하는 함수
 def convert_markdown_to_notion_blocks(markdown_text):
     """Markdown과 HTML을 Notion 블록 형식으로 변환"""
     # ✅ Markdown을 HTML로 변환
@@ -166,3 +166,15 @@ def convert_markdown_to_notion_blocks(markdown_text):
                 })
 
     return notion_blocks
+
+
+# content 에서 추출한 markdown text에서 문제 링크 추출하는 함수
+def extract_problem_link(markdown_text):
+    """
+    README.md에서 문제 링크를 추출하는 함수.
+    - 문제 링크 패턴을 찾고, 첫 번째 링크를 반환
+    - 링크가 없는 경우 None 반환
+    """
+    match = re.search(r"\[문제 링크\]\((.*?)\)", markdown_text)
+    return match.group(1) if match else None
+
