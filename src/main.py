@@ -1,6 +1,6 @@
 from github_api import get_all_commits, get_commit_files, get_file_content
 from notion_api import fetch_notion_database, add_problem_to_notion
-from utils import extract_difficulty, extract_site_name_from_path, extract_problem_link
+from utils import extract_difficulty, extract_site_name_from_path, extract_problem_link, extract_submission_date
 from config import GITHUB_OWNER, GITHUB_REPO
 import os
 
@@ -20,6 +20,7 @@ NOTION_LANGUAGE_MAP = {
     "rs": "rust"
 }
 
+## 문제 정보와 관련된건 아래 함수 이용
 def extract_problem_info(file_contents, existing_titles, difficulty):
     """
     `.md` 파일에서 문제 정보를 추출하여 문제별 데이터를 저장하는 함수
@@ -35,6 +36,9 @@ def extract_problem_info(file_contents, existing_titles, difficulty):
             # ✅ 문제 링크 추출 (README.md 파일에서)
             problem_link = extract_problem_link(content)
 
+            # ✅ 문제 제출 일자 추출 (README.md 파일에서)
+            submission_date = extract_submission_date(content)
+
             # ✅ 문제 이름과 사이트명 추출
             site_name = extract_site_name_from_path(filename)
             problem_name = os.path.basename(os.path.dirname(filename))  # 폴더명 = 문제 제목
@@ -49,7 +53,8 @@ def extract_problem_info(file_contents, existing_titles, difficulty):
                 "code_blocks": [],
                 "difficulty": difficulty,
                 "site_name": site_name,
-                "problem_link": problem_link
+                "problem_link": problem_link,
+                "submission_date": submission_date 
             }
 
     return problem_dict
@@ -84,7 +89,8 @@ def upload_to_notion(problem_dict):
             data["code_blocks"],
             data["difficulty"],
             data["site_name"],
-            data["problem_link"]
+            data["problem_link"],
+            data["submission_date"]
         )
 
 

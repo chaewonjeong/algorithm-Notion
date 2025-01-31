@@ -1,6 +1,7 @@
 from bs4 import BeautifulSoup
 import re
 import markdown
+from datetime import datetime, timedelta
 
 # 문제 제목이나 커밋 메시지에서 난이도를 추출하는 함수
 def extract_difficulty(text):
@@ -178,3 +179,23 @@ def extract_problem_link(markdown_text):
     match = re.search(r"\[문제 링크\]\((.*?)\)", markdown_text)
     return match.group(1) if match else None
 
+# content 에서 추출한 markdown text에서 제출 일자 추출하는 함수
+def extract_submission_date(markdown_text):
+    """
+    README.md에서 '제출 일자' 정보를 추출하여 ISO 8601 형식(UTC)으로 변환
+    - Notion API가 요구하는 `"YYYY-MM-DDTHH:MM:SS.000Z"` 포맷으로 변환
+    """
+    match = re.search(r"### 제출 일자\s*\n\s*(\d{4})년 (\d{1,2})월 (\d{1,2})일 (\d{2}):(\d{2}):(\d{2})", markdown_text)
+
+    if match:
+        # ✅ 문자열 날짜 → datetime 변환
+        year, month, day, hour, minute, second = map(int, match.groups())
+        submission_datetime = datetime(year, month, day, hour, minute, second)
+
+        # ✅ 한국 시간(UTC+9)을 UTC로 변환
+        submission_datetime -= timedelta(hours=9)
+
+        # ✅ Notion API에서 요구하는 ISO 8601 형식 (`YYYY-MM-DDTHH:MM:SS.000Z`)으로 변환
+        return submission_datetime.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+    return None  # 날짜 정보가 없으면 None 반환

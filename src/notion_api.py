@@ -54,7 +54,7 @@ def chunk_list(lst, chunk_size):
     for i in range(0, len(lst), chunk_size):
         yield lst[i:i + chunk_size]
 
-def add_problem_to_notion(title, description, code_blocks, difficulty, site_name, problem_link):
+def add_problem_to_notion(title, description, code_blocks, difficulty, site_name, problem_link, submission_date):
     """Notion에 문제 추가 (다양한 언어 지원 + 100개 제한 해결 + 상세 예외 처리)"""
     url = "https://api.notion.com/v1/pages"
 
@@ -91,7 +91,8 @@ def add_problem_to_notion(title, description, code_blocks, difficulty, site_name
             "문제 제목": {"title": [{"text": {"content": title}}]},
             "문제 링크": {"url": problem_link},
             "난이도": {"select": {"name": difficulty_value}},
-            "사이트": {"select": {"name": site_name}},  # ✅ 사이트 속성 추가
+            "사이트": {"select": {"name": site_name}},
+            "제출 일자": {"date": {"start": submission_date}}
         },
     }
 
