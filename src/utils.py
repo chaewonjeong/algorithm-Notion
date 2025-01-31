@@ -1,4 +1,6 @@
+from bs4 import BeautifulSoup
 import re
+import markdown
 
 # 문제 제목이나 커밋 메시지에서 난이도를 추출하는 함수
 def extract_difficulty(text):
@@ -12,3 +14,155 @@ def split_text_into_blocks(text, max_length=2000):
 ## repo 파일에서 사이트명 추출
 def extract_site_name_from_path(filename):
     return filename.split("/")[0] if "/" in filename else "Unknown"
+
+
+def convert_markdown_to_notion_blocks(markdown_text):
+    """Markdown과 HTML을 Notion 블록 형식으로 변환"""
+    # ✅ Markdown을 HTML로 변환
+    html_text = markdown.markdown(markdown_text)
+
+    # ✅ BeautifulSoup으로 HTML 파싱
+    soup = BeautifulSoup(html_text, "html.parser")
+    notion_blocks = []
+
+    for element in soup.children:  # ✅ 모든 최상위 요소만 순회 (중복 방지)
+        if element.name == "h1":  # 제목 (h1)
+            notion_blocks.append({
+                "object": "block",
+                "type": "heading_1",
+                "heading_1": {
+                    "rich_text": [{"text": {"content": element.get_text()}}]
+                }
+            })
+        elif element.name == "h2":  # 제목 (h2)
+            notion_blocks.append({
+                "object": "block",
+                "type": "heading_2",
+                "heading_2": {
+                    "rich_text": [{"text": {"content": element.get_text()}}]
+                }
+            })
+        elif element.name == "h3":  # 제목 (h3)
+            notion_blocks.append({
+                "object": "block",
+                "type": "heading_3",
+                "heading_3": {
+                    "rich_text": [{"text": {"content": element.get_text()}}]
+                }
+            })
+        elif element.name == "p":  # ✅ `<p>` 내부에 `img` 태그가 있는 경우도 포함
+            img_tags = element.find_all("img")
+            text_content = element.get_text(strip=True)
+
+            if img_tags:  # ✅ `<p>` 안에 `img` 태그가 있을 경우
+                if text_content:  # ✅ `<p>` 안에 텍스트가 있는 경우 먼저 텍스트 추가
+                    notion_blocks.append({
+                        "object": "block",
+                        "type": "paragraph",
+                        "paragraph": {
+                            "rich_text": [{"text": {"content": text_content}}]
+                        }
+                    })
+                for img in img_tags:
+                    img_src = img.get("src")
+                    img_alt = img.get("alt", "이미지")  # 대체 텍스트 기본값 설정
+
+                    if img_src.startswith("http"):  # Notion은 URL 이미지만 지원
+                        notion_blocks.append({
+                            "object": "block",
+                            "type": "image",
+                            "image": {
+                                "type": "external",
+                                "external": {"url": img_src}
+                            }
+                        })
+                        if img_alt:
+                            notion_blocks.append({
+                                "object": "block",
+                                "type": "paragraph",
+                                "paragraph": {
+                                    "rich_text": [{"text": {"content": img_alt}}]
+                                }
+                            })
+            else:  # ✅ 일반 단락 처리
+                if text_content:
+                    notion_blocks.append({
+                        "object": "block",
+                        "type": "paragraph",
+                        "paragraph": {
+                            "rich_text": [{"text": {"content": text_content}}]
+                        }
+                    })
+        elif element.name == "ul":  # 불릿 리스트
+            for li in element.find_all("li"):
+                notion_blocks.append({
+                    "object": "block",
+                    "type": "bulleted_list_item",
+                    "bulleted_list_item": {
+                        "rich_text": [{"text": {"content": li.get_text()}}]
+                    }
+                })
+        elif element.name == "ol":  # 번호 매긴 리스트
+            for idx, li in enumerate(element.find_all("li"), start=1):
+                notion_blocks.append({
+                    "object": "block",
+                    "type": "numbered_list_item",
+                    "numbered_list_item": {
+                        "rich_text": [{"text": {"content": f"{idx}. {li.get_text()}"}}]
+                    }
+                })
+        elif element.name == "table":  # 테이블 변환 (Notion API에서 테이블 지원 안 함 → 리스트 형태로 변환)
+            rows = element.find_all("tr")
+            for row in rows:
+                cols = row.find_all("td")
+                row_text = " | ".join([col.get_text() for col in cols])
+                notion_blocks.append({
+                    "object": "block",
+                    "type": "paragraph",
+                    "paragraph": {
+                        "rich_text": [{"text": {"content": row_text}}]
+                    }
+                })
+        elif element.name == "code":  # 코드 블록
+            code_content = element.get_text()
+            notion_blocks.append({
+                "object": "block",
+                "type": "code",
+                "code": {
+                    "rich_text": [{"text": {"content": code_content}}],
+                    "language": "java"  # 언어 감지 추가 가능
+                }
+            })
+        elif element.name == "img":  # ✅ 단독 이미지 변환
+            img_src = element.get("src")
+            img_alt = element.get("alt", "이미지")  # 대체 텍스트 기본값 설정
+
+            if img_src.startswith("http"):  # Notion은 URL 이미지만 지원
+                notion_blocks.append({
+                    "object": "block",
+                    "type": "image",
+                    "image": {
+                        "type": "external",
+                        "external": {"url": img_src}
+                    }
+                })
+                if img_alt:
+                    notion_blocks.append({
+                        "object": "block",
+                        "type": "paragraph",
+                        "paragraph": {
+                            "rich_text": [{"text": {"content": img_alt}}]
+                        }
+                    })
+        elif element.name is None:  # ✅ 일반 텍스트 처리
+            text = element.strip()
+            if text:
+                notion_blocks.append({
+                    "object": "block",
+                    "type": "paragraph",
+                    "paragraph": {
+                        "rich_text": [{"text": {"content": text}}]
+                    }
+                })
+
+    return notion_blocks

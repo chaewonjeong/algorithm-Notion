@@ -1,6 +1,6 @@
 import requests
 from config import NOTION_HEADERS, NOTION_DATABASE_ID
-from utils import split_text_into_blocks
+from utils import split_text_into_blocks, convert_markdown_to_notion_blocks
 
 # 노션 데이터베이스의 목록 가져오기 
 def fetch_notion_database():
@@ -49,54 +49,64 @@ def get_notion_database_properties():
         return [], []
 
 
+def chunk_list(lst, chunk_size):
+    """리스트를 chunk_size 크기만큼 나누는 함수"""
+    for i in range(0, len(lst), chunk_size):
+        yield lst[i:i + chunk_size]
+
 def add_problem_to_notion(title, description, code, difficulty, site_name, github_link):
+    """Notion에 문제 추가 (Batch API 요청 + 긴 텍스트 자동 분할 + 100개 제한 해결)"""
     url = "https://api.notion.com/v1/pages"
 
     # ✅ 기존 옵션 가져오기
     existing_difficulties = get_notion_database_properties()
 
     # ✅ 새로운 난이도 값이 기존에 없으면 기본값 "Unknown" 설정
-    difficulty_value = difficulty if difficulty in existing_difficulties else difficulty
+    difficulty_value = difficulty if difficulty in existing_difficulties else "Unknown"
 
-    # ✅ 긴 텍스트 분할
-    description_blocks = split_text_into_blocks(description)
-    code_blocks = split_text_into_blocks(code)
+    # ✅ Markdown을 Notion 블록으로 변환
+    description_blocks = convert_markdown_to_notion_blocks(description)
 
+    # ✅ 긴 텍스트(2000자 초과) 자동 분할 (코드 블록에만 적용)
+    code_blocks = [
+        {"object": "block", "type": "code", "code": {"rich_text": [{"text": {"content": block}}], "language": "java"}}
+        for block in split_text_into_blocks(code)
+    ]
+
+    # ✅ Notion Page 생성 (기본 정보만 설정)
     payload = {
-        "parent": { "database_id": NOTION_DATABASE_ID },
+        "parent": {"database_id": NOTION_DATABASE_ID},
         "properties": {
-            "문제 제목": { "title": [{ "text": { "content": title } }] },
-            "GitHub 링크": { "url": github_link },
-            "난이도": { "select": { "name": difficulty_value } },
-            "사이트": {"select": {"name": site_name}},
+            "문제 제목": {"title": [{"text": {"content": title}}]},
+            "GitHub 링크": {"url": github_link},
+            "난이도": {"select": {"name": difficulty_value}},
+            "사이트": {"select": {"name": site_name}},  # ✅ Notion 속성 추가
         },
-        "children": [
-            { "object": "block", "type": "heading_2", "heading_2": { "rich_text": [{ "text": { "content": "문제 설명" } }] }}
-        ]
     }
 
-    # ✅ 문제 설명을 여러 블록으로 추가
-    for block in description_blocks:
-        payload["children"].append(
-            { "object": "block", "type": "paragraph", "paragraph": { "rich_text": [{ "text": { "content": block } }] }}
-        )
-
-    # ✅ 소스 코드 추가 (여러 블록으로 나누기)
-    payload["children"].append(
-        { "object": "block", "type": "heading_2", "heading_2": { "rich_text": [{ "text": { "content": "소스 코드" } }] }}
-    )
-
-    for block in code_blocks:
-        payload["children"].append(
-            { "object": "block", "type": "code", "code": { 
-                "rich_text": [{ "text": { "content": block } }], 
-                "language": "java"
-            }}
-        )
-
+    # ✅ 페이지 생성 요청
     response = requests.post(url, headers=NOTION_HEADERS, json=payload)
-
     if response.status_code == 200:
+        notion_page_id = response.json()["id"]
         print(f"✅ Notion에 문제 추가 성공: {title}")
     else:
         print(f"❌ Notion API 에러: {response.status_code}, {response.json()}")
+        return
+
+    # ✅ 생성된 페이지에 `children` 블록을 100개씩 나누어 추가
+    all_blocks = [
+        {"object": "block", "type": "heading_2", "heading_2": {"rich_text": [{"text": {"content": "문제 설명"}}]}} 
+    ] + description_blocks + [
+        {"object": "block", "type": "heading_2", "heading_2": {"rich_text": [{"text": {"content": "소스 코드"}}]}} 
+    ] + code_blocks
+
+    for block_chunk in chunk_list(all_blocks, 100):  # ✅ 100개씩 나누어 전송
+        update_url = f"https://api.notion.com/v1/blocks/{notion_page_id}/children"
+        update_payload = {"children": block_chunk}
+        response = requests.patch(update_url, headers=NOTION_HEADERS, json=update_payload)
+
+        if response.status_code != 200:
+            print(f"❌ Notion API 추가 블록 전송 실패: {response.status_code}, {response.json()}")
+            return
+
+    print(f"✅ Notion에 문제의 설명 및 코드 추가 완료: {title}")
