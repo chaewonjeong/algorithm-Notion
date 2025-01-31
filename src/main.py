@@ -24,8 +24,11 @@ def process_commit(commit, existing_titles):
 
     file_contents = {filename: get_file_content(filename) for filename, _ in files}
 
+    # ✅ 문제별로 `.md`와 `.java` 파일을 매칭
+    problem_dict = {}
+
     for filename, content in file_contents.items():
-        if filename.endswith(".md"):  # ✅ 문제 제목은 .md 파일명에서 추출
+        if filename.endswith(".md"):  # ✅ 문제 설명 파일 (README.md)
             # ✅ 최상단의 README.md 파일인지 확인
             if filename.count("/") < 2:  # 상위 디렉토리가 없는 경우 (최상단 README.md)
                 print(f"⚠️ 최상단의 {filename} 파일은 제외합니다.")
@@ -38,12 +41,30 @@ def process_commit(commit, existing_titles):
             if problem_name in existing_titles:
                 print(f"✅ {problem_name} 문제는 이미 Notion에 존재하므로 건너뜀.")
                 continue  # 이미 존재하는 경우 스킵
-            
-            description = content  # 📝 문제 설명 (README.md 내용)
-            code = file_contents.get(filename.replace(".md", ".java"), "")  # 💻 소스 코드 (.java 내용)
 
-            print(f"🆕 새로운 문제 발견! {problem_name}을(를) Notion에 업로드합니다.")
-            add_problem_to_notion(problem_name, description, code, difficulty, site_name, commit_url)
+            # ✅ 문제 설명 저장
+            problem_dict[problem_name] = {
+                "description": content,
+                "code": "",  # 소스코드는 아래에서 추가
+                "difficulty": difficulty,
+                "site_name": site_name,
+                "commit_url": commit_url
+            }
+
+    # ✅ `.java` 파일을 해당 문제에 연결
+    for filename, content in file_contents.items():
+        if filename.endswith(".java"):  # ✅ 소스코드 파일
+            problem_name = os.path.basename(os.path.dirname(filename))  # 같은 폴더 내 문제 이름 찾기
+            if problem_name in problem_dict:
+                problem_dict[problem_name]["code"] = content  # ✅ 소스코드 추가
+                print(f"✅ {problem_name}의 Java 코드 추가 완료.")
+
+    # ✅ Notion에 업로드
+    for problem_name, data in problem_dict.items():
+        print(f"🆕 새로운 문제 발견! {problem_name}을(를) Notion에 업로드합니다.")
+        add_problem_to_notion(
+            problem_name, data["description"], data["code"], data["difficulty"], data["site_name"], data["commit_url"]
+        )
 
 def main():
     """Notion에서 기존 문제 목록을 가져와 GitHub의 최신 커밋을 처리"""
