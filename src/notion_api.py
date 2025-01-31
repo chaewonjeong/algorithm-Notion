@@ -54,33 +54,44 @@ def chunk_list(lst, chunk_size):
     for i in range(0, len(lst), chunk_size):
         yield lst[i:i + chunk_size]
 
-def add_problem_to_notion(title, description, code, difficulty, site_name, github_link):
-    """Notion에 문제 추가 (Batch API 요청 + 긴 텍스트 자동 분할 + 100개 제한 해결)"""
+def add_problem_to_notion(title, description, code_blocks, difficulty, site_name, github_link):
+    """Notion에 문제 추가 (다양한 언어 지원 + 100개 제한 해결 + 상세 예외 처리)"""
     url = "https://api.notion.com/v1/pages"
 
-    # ✅ 기존 옵션 가져오기
+    # ✅ 기존 옵션 가져오기 (난이도 select 옵션 확인)
     existing_difficulties = get_notion_database_properties()
 
     # ✅ 새로운 난이도 값이 기존에 없으면 기본값 "Unknown" 설정
     difficulty_value = difficulty if difficulty in existing_difficulties else "Unknown"
 
-    # ✅ Markdown을 Notion 블록으로 변환
+    # ✅ Markdown을 Notion 블록으로 변환 (문제 설명)
     description_blocks = convert_markdown_to_notion_blocks(description)
 
-    # ✅ 긴 텍스트(2000자 초과) 자동 분할 (코드 블록에만 적용)
-    code_blocks = [
-        {"object": "block", "type": "code", "code": {"rich_text": [{"text": {"content": block}}], "language": "java"}}
-        for block in split_text_into_blocks(code)
-    ]
+    # ✅ 코드 블록 생성 (다양한 언어 지원)
+    notion_code_blocks = []
+    for code_block in code_blocks:
+        language = code_block["language"]  # ✅ 해당 코드의 언어 추출
+        code_content = code_block["content"]
 
-    # ✅ Notion Page 생성 (기본 정보만 설정)
+        # ✅ 긴 코드 자동 분할 (2000자 제한 해결)
+        for chunk in split_text_into_blocks(code_content):
+            notion_code_blocks.append({
+                "object": "block",
+                "type": "code",
+                "code": {
+                    "rich_text": [{"text": {"content": chunk}}],
+                    "language": language
+                }
+            })
+
+    # ✅ Notion Page 생성 (기본 정보)
     payload = {
         "parent": {"database_id": NOTION_DATABASE_ID},
         "properties": {
             "문제 제목": {"title": [{"text": {"content": title}}]},
             "GitHub 링크": {"url": github_link},
             "난이도": {"select": {"name": difficulty_value}},
-            "사이트": {"select": {"name": site_name}},  # ✅ Notion 속성 추가
+            "사이트": {"select": {"name": site_name}},  # ✅ 사이트 속성 추가
         },
     }
 
@@ -95,12 +106,13 @@ def add_problem_to_notion(title, description, code, difficulty, site_name, githu
 
     # ✅ 생성된 페이지에 `children` 블록을 100개씩 나누어 추가
     all_blocks = [
-        {"object": "block", "type": "heading_2", "heading_2": {"rich_text": [{"text": {"content": "문제 설명"}}]}} 
+        {"object": "block", "type": "heading_2", "heading_2": {"rich_text": [{"text": {"content": "문제 설명"}}]}}
     ] + description_blocks + [
-        {"object": "block", "type": "heading_2", "heading_2": {"rich_text": [{"text": {"content": "소스 코드"}}]}} 
-    ] + code_blocks
+        {"object": "block", "type": "heading_2", "heading_2": {"rich_text": [{"text": {"content": "소스 코드"}}]}}
+    ] + notion_code_blocks
 
-    for block_chunk in chunk_list(all_blocks, 100):  # ✅ 100개씩 나누어 전송
+    # ✅ 블록 개수 제한 해결 (100개씩 나누어 전송)
+    for block_chunk in chunk_list(all_blocks, 100):
         update_url = f"https://api.notion.com/v1/blocks/{notion_page_id}/children"
         update_payload = {"children": block_chunk}
         response = requests.patch(update_url, headers=NOTION_HEADERS, json=update_payload)

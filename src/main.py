@@ -4,6 +4,22 @@ from utils import extract_difficulty, extract_site_name_from_path
 from config import GITHUB_OWNER, GITHUB_REPO
 import os
 
+# ✅ Notion API에서 지원하는 언어 매핑
+NOTION_LANGUAGE_MAP = {
+    "py": "python",
+    "java": "java",
+    "cpp": "c++",
+    "c": "c",
+    "js": "javascript",
+    "ts": "typescript",
+    "go": "go",
+    "swift": "swift",
+    "rb": "ruby",
+    "kt": "kotlin",
+    "php": "php",
+    "rs": "rust"
+}
+
 def process_commit(commit, existing_titles):
     """GitHub 커밋을 처리하여 Notion에 추가하는 함수"""
     commit_sha = commit["sha"]
@@ -24,7 +40,7 @@ def process_commit(commit, existing_titles):
 
     file_contents = {filename: get_file_content(filename) for filename, _ in files}
 
-    # ✅ 문제별로 `.md`와 `.java` 파일을 매칭
+    # ✅ 문제별로 `.md`와 코드 파일을 매칭
     problem_dict = {}
 
     for filename, content in file_contents.items():
@@ -45,25 +61,29 @@ def process_commit(commit, existing_titles):
             # ✅ 문제 설명 저장
             problem_dict[problem_name] = {
                 "description": content,
-                "code": "",  # 소스코드는 아래에서 추가
+                "code_blocks": [],  # ✅ 여러 언어의 코드 블록 저장
                 "difficulty": difficulty,
                 "site_name": site_name,
                 "commit_url": commit_url
             }
 
-    # ✅ `.java` 파일을 해당 문제에 연결
+    # ✅ `.java`, `.py`, `.cpp` 등 다양한 언어 파일을 해당 문제에 연결
     for filename, content in file_contents.items():
-        if filename.endswith(".java"):  # ✅ 소스코드 파일
-            problem_name = os.path.basename(os.path.dirname(filename))  # 같은 폴더 내 문제 이름 찾기
-            if problem_name in problem_dict:
-                problem_dict[problem_name]["code"] = content  # ✅ 소스코드 추가
-                print(f"✅ {problem_name}의 Java 코드 추가 완료.")
+        ext = filename.split(".")[-1]  # 파일 확장자 추출
+        problem_name = os.path.basename(os.path.dirname(filename))  # 같은 폴더 내 문제 이름 찾기
+
+        if problem_name in problem_dict and ext in NOTION_LANGUAGE_MAP:
+            problem_dict[problem_name]["code_blocks"].append({
+                "language": NOTION_LANGUAGE_MAP[ext],  # ✅ Notion API에서 지원하는 언어로 변환
+                "content": content
+            })
+            print(f"✅ {problem_name}의 {ext.upper()} 코드 추가 완료.")
 
     # ✅ Notion에 업로드
     for problem_name, data in problem_dict.items():
         print(f"🆕 새로운 문제 발견! {problem_name}을(를) Notion에 업로드합니다.")
         add_problem_to_notion(
-            problem_name, data["description"], data["code"], data["difficulty"], data["site_name"], data["commit_url"]
+            problem_name, data["description"], data["code_blocks"], data["difficulty"], data["site_name"], data["commit_url"]
         )
 
 def main():
