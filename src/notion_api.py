@@ -17,7 +17,7 @@ def fetch_notion_database():
         response = requests.post(url, headers=NOTION_HEADERS, json=payload)
 
         # 디버깅
-        print(response.json())
+        # print(response.json())
 
         if response.status_code == 200:
             data = response.json()
@@ -106,11 +106,24 @@ def add_problem_to_notion(title, description, code_blocks, difficulty, site_name
         return
 
     # ✅ 생성된 페이지에 `children` 블록을 100개씩 나누어 추가
-    all_blocks = [
-        {"object": "block", "type": "heading_2", "heading_2": {"rich_text": [{"text": {"content": "문제 설명"}}]}}
-    ] + description_blocks + [
-        {"object": "block", "type": "heading_2", "heading_2": {"rich_text": [{"text": {"content": "소스 코드"}}]}}
-    ] + notion_code_blocks
+    all_blocks = []
+    all_blocks.extend(description_blocks)  # ✅ description_blocks 추가
+    all_blocks.append({"object": "block", "type": "divider", "divider": {}})
+    all_blocks.append({"object": "block", "type": "heading_1", "heading_1": {"rich_text": [{"text": {"content": "나의 풀이"}}]}})
+    all_blocks.extend(notion_code_blocks)  # ✅ notion_code_blocks 추가
+    all_blocks.append({"object": "block", "type": "divider", "divider": {}})
+    all_blocks.append({"object": "block", "type": "heading_2", "heading_2": {"rich_text": [{"text": {"content": "📌 학습 인사이트"}}]}})
+    all_blocks.append({"object": "block", "type": "quote", "quote": {"rich_text": [{"text": {"content": "이 문제에서 배운 점을 기록하세요..."}}]}})
+    all_blocks.append({"object": "block", "type": "divider", "divider": {}})
+    all_blocks.append({"object": "block", "type": "heading_2", "heading_2": {"rich_text": [{"text": {"content": "참고 코드"}}]}})
+    all_blocks.append({
+        "object": "block",
+        "type": "code",
+        "code": {
+            "rich_text": [{"text": {"content": ""}}],
+            "language": language
+        }
+    })
 
     # ✅ 블록 개수 제한 해결 (100개씩 나누어 전송)
     for block_chunk in chunk_list(all_blocks, 100):
