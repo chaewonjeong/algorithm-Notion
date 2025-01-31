@@ -49,7 +49,7 @@ def get_notion_database_properties():
         return [], []
 
 
-def add_problem_to_notion(title, description, code, difficulty, github_link):
+def add_problem_to_notion(title, description, code, difficulty, site_name, github_link):
     url = "https://api.notion.com/v1/pages"
 
     # ✅ 기존 옵션 가져오기
@@ -68,6 +68,7 @@ def add_problem_to_notion(title, description, code, difficulty, github_link):
             "문제 제목": { "title": [{ "text": { "content": title } }] },
             "GitHub 링크": { "url": github_link },
             "난이도": { "select": { "name": difficulty_value } },
+            "사이트": {"select": {"name": site_name}},
         },
         "children": [
             { "object": "block", "type": "heading_2", "heading_2": { "rich_text": [{ "text": { "content": "문제 설명" } }] }}

@@ -1,7 +1,8 @@
 from github_api import get_all_commits, get_commit_files, get_file_content
 from notion_api import fetch_notion_database, add_problem_to_notion
-from utils import extract_difficulty
+from utils import extract_difficulty, extract_site_name_from_path
 from config import GITHUB_OWNER, GITHUB_REPO
+import os
 
 def process_commit(commit, existing_titles):
     """GitHub 커밋을 처리하여 Notion에 추가하는 함수"""
@@ -25,18 +26,24 @@ def process_commit(commit, existing_titles):
 
     for filename, content in file_contents.items():
         if filename.endswith(".md"):  # ✅ 문제 제목은 .md 파일명에서 추출
-            title = filename.replace(".md", "")
+            # ✅ 최상단의 README.md 파일인지 확인
+            if filename.count("/") < 2:  # 상위 디렉토리가 없는 경우 (최상단 README.md)
+                print(f"⚠️ 최상단의 {filename} 파일은 제외합니다.")
+                continue  # 최상단 README.md 파일은 제외
 
-            if title in existing_titles:
-                print(f"✅ {title} 문제는 이미 Notion에 존재하므로 건너뜀.")
+            # ✅ 문제 이름을 폴더 구조에서 가져오기 (마지막 폴더명)
+            site_name = extract_site_name_from_path(filename)  # ✅ 파일 경로에서 사이트명 추출
+            problem_name = os.path.basename(os.path.dirname(filename))  # 상위 폴더명을 문제 제목으로 사용
+
+            if problem_name in existing_titles:
+                print(f"✅ {problem_name} 문제는 이미 Notion에 존재하므로 건너뜀.")
                 continue  # 이미 존재하는 경우 스킵
             
             description = content  # 📝 문제 설명 (README.md 내용)
             code = file_contents.get(filename.replace(".md", ".java"), "")  # 💻 소스 코드 (.java 내용)
 
-            print(f"🆕 새로운 문제 발견! {title}을(를) Notion에 업로드합니다.")
-            add_problem_to_notion(title, description, code, difficulty, commit_url)
-
+            print(f"🆕 새로운 문제 발견! {problem_name}을(를) Notion에 업로드합니다.")
+            add_problem_to_notion(problem_name, description, code, difficulty, site_name, commit_url)
 
 def main():
     """Notion에서 기존 문제 목록을 가져와 GitHub의 최신 커밋을 처리"""
@@ -49,7 +56,7 @@ def main():
         return
 
     # ✅ 가장 최근 커밋부터 처리
-    for commit in commits[:5]:  # 최신 5개 커밋만 처리
+    for commit in commits:  # 최신 5개 커밋만 처리
         process_commit(commit, existing_titles)
 
 if __name__ == "__main__":

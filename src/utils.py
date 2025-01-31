@@ -9,4 +9,6 @@ def extract_difficulty(text):
 def split_text_into_blocks(text, max_length=2000):
     return [text[i:i + max_length] for i in range(0, len(text), max_length)]
 
-# 데이터 베이스에 업로드 될 커밋메세지에서의 제목
+## repo 파일에서 사이트명 추출
+def extract_site_name_from_path(filename):
+    return filename.split("/")[0] if "/" in filename else "Unknown"
