@@ -25,21 +25,7 @@ NOTION_HEADERS = {
     "Notion-Version": "2022-06-28",
 }
 
-# ✅ 1️⃣ Notion에서 기존 문제 목록 가져오기
-def get_existing_notion_titles():
-    url = f"https://api.notion.com/v1/databases/{NOTION_DATABASE_ID}/query"
-    response = requests.post(url, headers=NOTION_HEADERS)
-    
-    existing_titles = set()
-    if response.status_code == 200:
-        results = response.json().get("results", [])
-        for page in results:
-            title_property = page["properties"].get("문제 제목", {}).get("title", [])
-            if title_property:
-                existing_titles.add(title_property[0]["text"]["content"])
-    return existing_titles
-
-# ✅ 2️⃣ GitHub에서 모든 커밋 가져오기
+# GitHub에서 모든 커밋 가져오기
 def get_all_commits():
     commits = []
     url = f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/commits"
@@ -56,7 +42,7 @@ def get_all_commits():
     
     return commits  # 모든 커밋 리스트 반환s
 
-# ✅ 3️⃣ 특정 커밋에서 변경된 파일 가져오기
+# 특정 커밋에서 변경된 파일 가져오기
 def get_commit_files(commit_sha):
     url = f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/commits/{commit_sha}"
     response = requests.get(url, headers=GITHUB_HEADERS)
@@ -69,7 +55,7 @@ def get_commit_files(commit_sha):
         print(f"❌ GitHub API 에러: {response.status_code}")
         return []
     
-# ✅ 4️⃣ 특정 파일의 원본 내용 가져오기
+# 특정 파일의 원본 내용 가져오기
 def get_file_content(file_path, branch="main"):
     url = f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/contents/{file_path}?ref={branch}"
     response = requests.get(url, headers=GITHUB_HEADERS)
@@ -82,9 +68,49 @@ def get_file_content(file_path, branch="main"):
         print("Error:", response.json())
         return None
 
+# 노션 데이터베이스의 목록 가져오기 
+def fetch_notion_database():
+    url = f"https://api.notion.com/v1/databases/{NOTION_DATABASE_ID}/query"
+    has_more = True
+    next_cursor = None
+    all_pages = []
 
+    while has_more:
+        payload = {"page_size": 100}
+        if next_cursor:
+            payload["start_cursor"] = next_cursor  # 페이지네이션 처리
+
+        response = requests.post(url, headers=NOTION_HEADERS, json=payload)
+
+        if response.status_code == 200:
+            data = response.json()
+            all_pages.extend(data.get("results", []))
+            has_more = data.get("has_more", False)
+            next_cursor = data.get("next_cursor", None)
+        else:
+            print(f"❌ Notion API 에러: {response.status_code}, {response.json()}")
+            return []
+
+    return all_pages
+
+def print_notion_database():
+    pages = fetch_notion_database()
+    if not pages:
+        print("⚠️ Notion 데이터베이스에 저장된 항목이 없습니다.")
+        return
+    
+    print(f"\n📌 Notion 데이터베이스에서 가져온 {len(pages)}개의 문제 목록:")
+
+    for page in pages:
+        title_property = page["properties"].get("문제 제목", {}).get("title", [])
+        created_time = page.get("created_time", "Unknown")
+        
+        title = title_property[0]["text"]["content"] if title_property else "제목 없음"
+        
+        print(f"📝 {title} | 생성 날짜: {created_time}")
 
 def main():
+
     # ✅ GitHub에서 최근 커밋 목록 가져오기
     commits = get_all_commits()
     if not commits:
@@ -116,7 +142,7 @@ def main():
             else:
                 print(f"❌ {filename} 파일 내용을 가져오지 못했습니다.")
 
-        # ✅ 파일 내용을 출력 (또는 Notion에 저장)
+        # ✅ 파일 내용을 출력 
         for filename, content in file_contents.items():
             print(f"\n📄 {filename} 내용 (최대 500자 표시):\n{content[:500]}")
 
